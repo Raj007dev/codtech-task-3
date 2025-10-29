@@ -1,0 +1,227 @@
+# pentest_toolkit.py
+# A simple, modular Python toolkit for basic penetration testing tasks.
+# Modules included: Port Scanner, Simple Brute-Force Concept.
+#
+# NOTE: This script is for educational purposes only. Unauthorized testing
+# on systems you do not own or have explicit permission to test is illegal.
+
+import socket
+import argparse
+import sys
+import threading
+from queue import Queue
+import time
+import itertools
+import string
+
+# --- Configuration ---
+TIMEOUT = 0.5  # Socket timeout for port scanning in seconds
+MAX_THREADS = 100 # Maximum threads for port scanner
+DEFAULT_BRUTE_FORCE_CHARS = string.ascii_lowercase + string.digits # Character set for brute-force generation
+
+# ==============================================================================
+# 1. PORT SCANNER MODULE
+# ==============================================================================
+
+def worker(target, port_queue, open_ports):
+    """Worker function for the port scanner thread pool."""
+    while not port_queue.empty():
+        port = port_queue.get()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(TIMEOUT)
+
+        try:
+            # Connect to the target IP and port
+            result = sock.connect_ex((target, port))
+            if result == 0:
+                try:
+                    service = socket.getservbyport(port, 'tcp')
+                except OSError:
+                    service = "Unknown"
+                open_ports.append((port, service))
+                print(f"[+] Port {port} is OPEN ({service})")
+        except socket.error as e:
+            # Handle connection errors gracefully
+            # print(f"Error on port {port}: {e}") # Usually suppress for speed
+            pass
+        finally:
+            sock.close()
+            port_queue.task_done()
+
+def run_port_scanner(target_ip, start_port, end_port):
+    """
+    Initializes and runs the multi-threaded port scanner.
+    """
+    print(f"\n--- Starting Port Scan on Target: {target_ip} ({socket.gethostbyname(target_ip)}) ---")
+    print(f"Scanning range: {start_port} to {end_port}")
+
+    port_queue = Queue()
+    open_ports = []
+    
+    # Fill the queue with all ports to scan
+    for port in range(start_port, end_port + 1):
+        port_queue.put(port)
+
+    thread_count = min(MAX_THREADS, end_port - start_port + 1)
+    threads = []
+
+    start_time = time.time()
+
+    # Create and start worker threads
+    for _ in range(thread_count):
+        t = threading.Thread(target=worker, args=(target_ip, port_queue, open_ports))
+        t.daemon = True
+        t.start()
+        threads.append(t)
+
+    # Wait for all ports in the queue to be processed
+    port_queue.join()
+
+    end_time = time.time()
+
+    print("\n--- Scan Complete ---")
+    if open_ports:
+        print(f"Found {len(open_ports)} open ports in {end_time - start_time:.2f} seconds.")
+        for port, service in sorted(open_ports):
+            print(f"    - Port {port}/TCP: {service}")
+    else:
+        print(f"No open ports found in the range {start_port}-{end_port} in {end_time - start_time:.2f} seconds.")
+
+
+# ==============================================================================
+# 2. SIMPLE BRUTE-FORCER CONCEPT MODULE (Iterative Logic Demo)
+# ==============================================================================
+
+def generate_passwords(characters, max_length):
+    """
+    A generator that yields all possible passwords up to max_length.
+    Note: For practical use, keep max_length very low (e.g., 1-4) due to
+    the exponential nature of character combinations.
+    """
+    for length in range(1, max_length + 1):
+        for combination in itertools.product(characters, repeat=length):
+            yield "".join(combination)
+
+def simple_brute_force_concept(target_ip, target_port, max_length=4):
+    """
+    Demonstrates the brute-force principle by generating and attempting
+    to connect to a target with theoretical credentials (passwords).
+
+    This implementation focuses on the logical flow (iteration, attempt, check)
+    rather than a full, live protocol implementation (like HTTP or SSH).
+    It simply attempts a TCP connection to simulate a service check.
+    """
+    print(f"\n--- Starting Brute-Force Concept Demo ---")
+    print(f"Target: {target_ip}:{target_port}")
+    print(f"Max Length: {max_length}")
+    print(f"Character Set: {DEFAULT_BRUTE_FORCE_CHARS}")
+    
+    attempts = 0
+    start_time = time.time()
+    found_credentials = False
+
+    # Simulate a successful connection for demonstration purposes after 50 attempts
+    # In a real tool, this is where the login protocol (e.g., sending HTTP POST or SSH credentials) happens.
+    SIMULATED_SUCCESS_COUNT = 50
+
+    try:
+        for password in generate_passwords(DEFAULT_BRUTE_FORCE_CHARS, max_length):
+            attempts += 1
+            
+            # 1. Attempt Network Connection (Basic Check)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.1) # Shorter timeout for brute-force
+
+            try:
+                # Attempt connection to see if service is running
+                result = sock.connect_ex((target_ip, target_port))
+                
+                # 2. Simulate Credential Attempt Logic
+                if attempts == SIMULATED_SUCCESS_COUNT:
+                    print(f"\n[!!!] SIMULATED SUCCESS! Found Password: {password} (Attempt #{attempts})")
+                    found_credentials = True
+                    break
+                
+                if attempts % 10 == 0:
+                     print(f"[.] Attempt #{attempts}: Trying password '{password}'...")
+                
+            except socket.error as e:
+                # Connection failed/refused - service might be down or unreachable
+                print(f"[!] Target service unreachable at {target_ip}:{target_port}. Aborting.")
+                return
+
+            finally:
+                sock.close()
+
+    except KeyboardInterrupt:
+        print("\n[!] Brute-force stopped by user.")
+
+    end_time = time.time()
+
+    if not found_credentials:
+        print(f"\n--- Brute-Force Concept Complete ---")
+        print(f"Checked {attempts} passwords in {end_time - start_time:.2f} seconds. No credentials found (or simulated success limit reached).")
+    else:
+         print(f"Total attempts: {attempts} in {end_time - start_time:.2f} seconds.")
+
+
+# ==============================================================================
+# MAIN APPLICATION LOGIC (ARGPARSE)
+# ==============================================================================
+
+def main():
+    """Main function to parse arguments and run the selected module."""
+    parser = argparse.ArgumentParser(
+        description="A simple, modular penetration testing toolkit.",
+        epilog="Use -h/--help on subcommands for more details (e.g., python pentest_toolkit.py scan -h)"
+    )
+    # Require a submodule to be selected
+    subparsers = parser.add_subparsers(dest='module', required=True, help='Select a module to run (scan or brute).')
+
+    # --- Port Scanner Submodule ---
+    scan_parser = subparsers.add_parser('scan', help='Run the multi-threaded port scanner.')
+    scan_parser.add_argument('target_ip', help='Target IP address or hostname.')
+    scan_parser.add_argument('-p', '--ports', required=True, help='Port range to scan (e.g., 1-1024 or 80,443).')
+    
+    # --- Brute-Force Concept Submodule ---
+    brute_parser = subparsers.add_parser('brute', help='Run the simple brute-force concept demo.')
+    brute_parser.add_argument('target_ip', help='Target IP address or hostname.')
+    brute_parser.add_argument('target_port', type=int, help='Target port number (e.g., 22 for SSH, 80 for HTTP).')
+    brute_parser.add_argument('-l', '--length', type=int, default=4, help='Max password length to check (DANGEROUS for large values, default: 4).')
+
+
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+
+    args = parser.parse_args()
+
+    try:
+        if args.module == 'scan':
+            target_ip = args.target_ip
+            port_input = args.ports
+            
+            # Handle port range (1-1024) or specific ports (80,443)
+            if '-' in port_input:
+                start_port, end_port = map(int, port_input.split('-'))
+                run_port_scanner(target_ip, start_port, end_port)
+            elif ',' in port_input:
+                # Scanning individual ports is not optimized for the current queue system,
+                # but we can wrap them in a simple loop.
+                ports = [int(p) for p in port_input.split(',')]
+                for port in ports:
+                    run_port_scanner(target_ip, port, port)
+            else:
+                # Single port scan
+                port = int(port_input)
+                run_port_scanner(target_ip, port, port)
+
+        elif args.module == 'brute':
+            simple_brute_force_concept(args.target_ip, args.target_port, args.length)
+
+    except Exception as e:
+        print(f"\n[!!!] An unexpected error occurred: {e}")
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
