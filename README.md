@@ -3,7 +3,7 @@ COMPANY: CODTECH IT SOLUTIONS
 ID: CT04DR203
 DOMAIN: CYBER SECURITY AND ETHICAL HACKING 
 DURATION: OCTOBER TO NOVEMBER 2025
-
+MENTOR: NEELA SANTOSH KUMAR
 
 Overview of the Penetration Testing Toolkit (pentest_toolkit.py)
 ​This Python script is designed as a foundational, modular command-line utility for basic network penetration testing and security assessment tasks. It leverages standard Python libraries for network communication and concurrency.
